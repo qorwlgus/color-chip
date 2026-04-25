@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>COLOR CHIP EXTRACTOR</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Anton&family=Space+Mono:wght@400;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --linen: #FFEDE3;
+    --brown: #49261D;
+    --orange: #FB4D00;
+    --blue: #CAE7F7;
+    --chip-w: 160px;
+    --chip-h: 220px;
+  }
+
+  body {
+    background: #1a1a1a;
+    font-family: 'Anton', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* ── STAGE ── */
+  #stage {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── DROP ZONE ── */
+  #dropzone {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    cursor: pointer;
+    transition: opacity .3s;
+    z-index: 2;
+  }
+  #dropzone.hidden { opacity: 0; pointer-events: none; }
+
+  #dropzone .ring {
+    width: 180px; height: 180px;
+    border: 3px dashed #555;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .3s, transform .3s;
+  }
+  #dropzone:hover .ring,
+  #dropzone.drag-over .ring {
+    border-color: var(--orange);
+    transform: scale(1.05);
+  }
+  #dropzone .icon {
+    font-size: 48px;
+    opacity: .6;
+    transition: opacity .3s;
+  }
+  #dropzone:hover .icon { opacity: 1; }
+  #dropzone p {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: #666;
+    letter-spacing: .08em;
+    text-align: center;
+    line-height: 1.8;
+  }
+  #fileInput { display: none; }
+
+  /* ── BG IMAGE ── */
+  #bgImage {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0;
+    transition: opacity .6s ease;
+    z-index: 0;
+  }
+  #bgImage.visible { opacity: 1; }
+  #bgOverlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.28);
+    z-index: 1;
+    opacity: 0;
+    transition: opacity .6s;
+  }
+  #bgOverlay.visible { opacity: 1; }
+
+  /* ── CHIP GRID ── */
+  #chipGrid {
+    position: relative;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: var(--chip-w) var(--chip-w);
+    grid-template-rows: var(--chip-h) var(--chip-h);
+    gap: 10px;
+    opacity: 0;
+    transform: translateY(20px) scale(.96);
+    transition: opacity .5s .2s, transform .5s .2s;
+    pointer-events: none;
+  }
+  #chipGrid.visible {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .chip {
+    border-radius: 12px;
+    padding: 16px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: default;
+    box-shadow: 0 8px 32px rgba(0,0,0,.35);
+    animation: chipPop .4s cubic-bezier(.34,1.56,.64,1) both;
+    position: relative;
+    overflow: hidden;
+  }
+  .chip::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,.08) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  @keyframes chipPop {
+    from { transform: scale(.88); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+  .chip:nth-child(1) { animation-delay: .05s; }
+  .chip:nth-child(2) { animation-delay: .12s; }
+  .chip:nth-child(3) { animation-delay: .19s; }
+  .chip:nth-child(4) { animation-delay: .26s; }
+
+  .chip-name {
+    font-family: 'Anton', sans-serif;
+    font-size: 15px;
+    letter-spacing: .06em;
+    line-height: 1.1;
+    text-transform: uppercase;
+    mix-blend-mode: multiply;
+  }
+  .chip-hex {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .12em;
+    opacity: .75;
+    text-transform: uppercase;
+  }
+  .chip-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .15em;
+    opacity: .55;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  /* dark text chips */
+  .chip.dark .chip-name,
+  .chip.dark .chip-hex,
+  .chip.dark .chip-label { color: #1a1a1a; }
+  /* light text chips */
+  .chip.light .chip-name,
+  .chip.light .chip-hex,
+  .chip.light .chip-label { color: #f5f0eb; }
+
+  /* ── COPY TOOLTIP ── */
+  .chip {
+    cursor: pointer;
+  }
+  .chip:hover {
+    transform: scale(1.03);
+    transition: transform .15s;
+  }
+  .chip-copied {
+    position: absolute;
+    bottom: 10px; right: 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .1em;
+    padding: 3px 7px;
+    border-radius: 30px;
+    background: rgba(0,0,0,.18);
+    color: inherit;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s;
+  }
+  .chip.copied .chip-copied { opacity: 1; }
+
+  /* ── CONTROLS ── */
+  #controls {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: flex;
+    gap: 12px;
+    opacity: 0;
+    transition: opacity .4s .5s;
+  }
+  #controls.visible { opacity: 1; }
+
+  .btn {
+    font-family: 'Anton', sans-serif;
+    font-size: 13px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 10px 22px;
+    border: none;
+    border-radius: 100px;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .btn:active { transform: translateY(0); }
+
+  #btnReroll {
+    background: var(--orange);
+    color: #fff;
+  }
+  #btnReset {
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,.2);
+  }
+
+  /* ── HEADER ── */
+  #header {
+    position: absolute;
+    top: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    text-align: center;
+    pointer-events: none;
+  }
+  #header h1 {
+    font-family: 'Anton', sans-serif;
+    font-size: clamp(22px, 4vw, 38px);
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: #fff;
+    text-shadow: 0 2px 16px rgba(0,0,0,.5);
+    white-space: nowrap;
+  }
+  #header h1 span {
+    color: var(--orange);
+  }
+
+  /* ── SPINNER ── */
+  #spinner {
+    position: absolute;
+    z-index: 30;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  #spinner.active { display: flex; }
+  .spin-ring {
+    width: 44px; height: 44px;
+    border: 3px solid rgba(255,255,255,.15);
+    border-top-color: var(--orange);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #spinner p {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #aaa;
+    letter-spacing: .1em;
+  }
+
+  /* hidden canvas */
+  #canvas { display: none; }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="stage">
+  <div id="header">
+    <h1><span>COLOR</span> CHIP MAKER</h1>
+  </div>
+  <div id="bgImage"></div>
+  <div id="bgOverlay"></div>
+
+  <!-- Drop Zone -->
+  <div id="dropzone">
+    <div class="ring">
+      <span class="icon">🖼️</span>
+    </div>
+    <p>이미지를 드래그하거나<br>클릭해서 업로드</p>
+  </div>
+  <input type="file" id="fileInput" accept="image/*">
+
+  <!-- Spinner -->
+  <div id="spinner">
+    <div class="spin-ring"></div>
+    <p>EXTRACTING COLORS...</p>
+  </div>
+
+  <!-- Chip Grid -->
+  <div id="chipGrid">
+    <div class="chip" data-index="0">
+      <div>
+        <div class="chip-name"></div>
+      </div>
+      <div>
+        <div class="chip-label">HEX</div>
+        <div class="chip-hex"></div>
+      </div>
+      <div class="chip-copied">COPIED!</div>
+    </div>
+    <div class="chip" data-index="1">
+      <div>
+        <div class="chip-name"></div>
+      </div>
+      <div>
+        <div class="chip-label">HEX</div>
+        <div class="chip-hex"></div>
+      </div>
+      <div class="chip-copied">COPIED!</div>
+    </div>
+    <div class="chip" data-index="2">
+      <div>
+        <div class="chip-name"></div>
+      </div>
+      <div>
+        <div class="chip-label">HEX</div>
+        <div class="chip-hex"></div>
+      </div>
+      <div class="chip-copied">COPIED!</div>
+    </div>
+    <div class="chip" data-index="3">
+      <div>
+        <div class="chip-name"></div>
+      </div>
+      <div>
+        <div class="chip-label">HEX</div>
+        <div class="chip-hex"></div>
+      </div>
+      <div class="chip-copied">COPIED!</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div id="controls">
+    <button class="btn" id="btnReroll">🔄 컬러칩 다시 뽑기</button>
+    <button class="btn" id="btnReset">새 이미지</button>
+  </div>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const bgImage  = document.getElementById('bgImage');
+const bgOverlay= document.getElementById('bgOverlay');
+const chipGrid = document.getElementById('chipGrid');
+const controls = document.getElementById('controls');
+const spinner  = document.getElementById('spinner');
+const canvas   = document.getElementById('canvas');
+const ctx      = canvas.getContext('2d');
+
+let currentImageSrc = null;
+let allColors = [];
+
+// ─── DRAG & DROP ───────────────────────────────────────────
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+document.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropzone.classList.add('drag-over');
+});
+document.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadFile(file);
+});
+
+// ─── LOAD FILE ─────────────────────────────────────────────
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    currentImageSrc = e.target.result;
+    processImage(currentImageSrc);
+  };
+  reader.readAsDataURL(file);
+}
+
+function processImage(src) {
+  dropzone.classList.add('hidden');
+  chipGrid.classList.remove('visible');
+  controls.classList.remove('visible');
+  spinner.classList.add('active');
+
+  const img = new Image();
+  img.onload = () => {
+    // set BG
+    bgImage.style.backgroundImage = `url(${src})`;
+    bgImage.classList.add('visible');
+    bgOverlay.classList.add('visible');
+
+    // extract on canvas
+    canvas.width  = Math.min(img.width,  400);
+    canvas.height = Math.min(img.height, 400);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    allColors = extractColors(32);
+    showChips(pickFour(allColors));
+
+    spinner.classList.remove('active');
+    chipGrid.classList.add('visible');
+    controls.classList.add('visible');
+  };
+  img.src = src;
+}
+
+// ─── COLOR EXTRACTION ──────────────────────────────────────
+function extractColors(sampleStep) {
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const buckets = {};
+
+  for (let i = 0; i < data.length; i += 4 * sampleStep) {
+    const r = Math.round(data[i]   / 16) * 16;
+    const g = Math.round(data[i+1] / 16) * 16;
+    const b = Math.round(data[i+2] / 16) * 16;
+    const a = data[i+3];
+    if (a < 128) continue;
+    const key = `${r},${g},${b}`;
+    buckets[key] = (buckets[key] || 0) + 1;
+  }
+
+  return Object.entries(buckets)
+    .sort((a, b) => b[1] - a[1])
+    .map(([key]) => {
+      const [r,g,b] = key.split(',').map(Number);
+      return { r, g, b, hex: rgbToHex(r,g,b) };
+    });
+}
+
+function colorDistance(a, b) {
+  return Math.sqrt(
+    (a.r-b.r)**2 + (a.g-b.g)**2 + (a.b-b.b)**2
+  );
+}
+
+function pickFour(colors, minDist = 80) {
+  if (!colors.length) return [];
+  const chosen = [colors[0]];
+
+  for (const c of colors) {
+    if (chosen.length >= 4) break;
+    const far = chosen.every(ch => colorDistance(c, ch) >= minDist);
+    if (far) chosen.push(c);
+  }
+
+  // if not enough distinct colors, relax threshold
+  if (chosen.length < 4) {
+    for (const c of colors) {
+      if (chosen.length >= 4) break;
+      if (!chosen.includes(c)) chosen.push(c);
+    }
+  }
+  return chosen;
+}
+
+// ─── COLOR NAMES ───────────────────────────────────────────
+function colorName(r, g, b) {
+  const h = rgbToHsl(r, g, b);
+  const hue = h[0], sat = h[1], lit = h[2];
+
+  if (sat < 12) {
+    if (lit > 85) return 'CLOUD WHITE';
+    if (lit > 60) return 'SILVER MIST';
+    if (lit > 35) return 'IRON GREY';
+    return 'OBSIDIAN';
+  }
+  const hueName = [
+    [15,'CRIMSON RED'],[30,'BURNT SIENNA'],[45,'AMBER GOLD'],
+    [65,'GOLDEN HOUR'],[80,'LIME BURST'],[150,'SAGE GREEN'],
+    [175,'SEAFOAM'],[195,'SKY POOL'],[220,'COBALT BLUE'],
+    [255,'INDIGO INK'],[275,'VIOLET DUSK'],[300,'ORCHID'],
+    [330,'ROSEWOOD'],[360,'SCARLET']
+  ];
+
+  if (lit < 22) return 'DARK FOREST';
+  if (lit > 82) return sat < 35 ? 'LINEN' : 'PASTEL BLUSH';
+
+  for (const [threshold, name] of hueName) {
+    if (hue <= threshold) return name;
+  }
+  return 'CORAL REEF';
+}
+
+function rgbToHsl(r,g,b) {
+  r/=255; g/=255; b/=255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b);
+  let h, s, l=(max+min)/2;
+  if (max===min) { h=s=0; }
+  else {
+    const d=max-min;
+    s = l>0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max){
+      case r: h=((g-b)/d+(g<b?6:0))/6; break;
+      case g: h=((b-r)/d+2)/6; break;
+      case b: h=((r-g)/d+4)/6; break;
+    }
+  }
+  return [Math.round(h*360), Math.round(s*100), Math.round(l*100)];
+}
+
+function rgbToHex(r,g,b) {
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0').toUpperCase()).join('');
+}
+
+function luminance(r,g,b) {
+  return 0.299*r + 0.587*g + 0.114*b;
+}
+
+// ─── RENDER CHIPS ──────────────────────────────────────────
+function showChips(colors) {
+  const chips = document.querySelectorAll('.chip');
+  chips.forEach((chip, i) => {
+    const c = colors[i] || { r:200,g:200,b:200, hex:'#C8C8C8' };
+    const name = colorName(c.r, c.g, c.b);
+    const lum  = luminance(c.r, c.g, c.b);
+    const isDark = lum < 140;
+
+    chip.style.background = c.hex;
+    chip.classList.toggle('dark', !isDark);
+    chip.classList.toggle('light', isDark);
+    chip.querySelector('.chip-name').textContent = name;
+    chip.querySelector('.chip-hex').textContent  = c.hex;
+    chip.classList.remove('copied');
+
+    // re-trigger animation
+    chip.style.animation = 'none';
+    void chip.offsetWidth;
+    chip.style.animation = '';
+
+    chip._hex = c.hex;
+  });
+}
+
+// ─── COPY ON CLICK ─────────────────────────────────────────
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    if (!chip._hex) return;
+    navigator.clipboard.writeText(chip._hex).then(() => {
+      chip.classList.add('copied');
+      setTimeout(() => chip.classList.remove('copied'), 1500);
+    });
+  });
+});
+
+// ─── REROLL ────────────────────────────────────────────────
+document.getElementById('btnReroll').addEventListener('click', () => {
+  if (!allColors.length) return;
+
+  // shuffle top candidates then pick four
+  const pool = allColors.slice(0, Math.min(60, allColors.length));
+  for (let i = pool.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [pool[i],pool[j]] = [pool[j],pool[i]];
+  }
+  showChips(pickFour(pool, 60));
+});
+
+// ─── RESET ─────────────────────────────────────────────────
+document.getElementById('btnReset').addEventListener('click', () => {
+  bgImage.classList.remove('visible');
+  bgOverlay.classList.remove('visible');
+  chipGrid.classList.remove('visible');
+  controls.classList.remove('visible');
+  dropzone.classList.remove('hidden');
+  currentImageSrc = null;
+  allColors = [];
+  fileInput.value = '';
+});
+</script>
+</body>
+</html>
